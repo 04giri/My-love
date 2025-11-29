@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>For You ❤️</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: 'Courier New', Courier, monospace;
+            touch-action: none;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #message {
+            position: absolute;
+            top: 15%;
+            width: 100%;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.95);
+            font-size: 1.5rem;
+            pointer-events: none;
+            text-shadow: 0 0 20px rgba(255, 105, 180, 0.9);
+            z-index: 10;
+        }
+
+        .cursor {
+            display: inline-block;
+            width: 2px;
+            background-color: white;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        @media (max-width: 600px) {
+            #message {
+                font-size: 1.2rem;
+                top: 20%;
+                padding: 0 20px;
+                box-sizing: border-box;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="message"></div>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        /**
+         * Configuration
+         */
+        const CONFIG = {
+            message: "For the one who makes\nmy world bloom. ❤️\n(Tap the screen...)",
+            speed: 1, 
+            touchMessages: [
+                "I LOVE YOU ❤️", 
+                "Ammmmmmmuuuuuuuuuh 😚", 
+                "My Moon & Stars 🌙",
+                "Forever Yours ♾️",
+                "You are Magic ✨"
+            ]
+        };
+
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const messageEl = document.getElementById('message');
+
+        let width, height;
+        let particles = [];
+        let stars = [];
+        let shootingStars = [];
+        let stems = [];
+        let hearts = []; 
+        let floatingTexts = [];
+        let grass = [];
+        let fireflies = [];
+        let cursorParticles = [];
+        let clickCount = 0;
+        let skyShift = 0; // For background animation
+        
+        // --- Setup & Resize ---
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+            if (stems.length === 0) initScene();
+        }
+
+        window.addEventListener('resize', resize);
+
+        // --- Utils ---
+        function random(min, max) {
+            return Math.random() * (max - min) + min;
+        }
+
+        // --- Classes ---
+
+        class Star {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = random(0, width);
+                this.y = random(0, height * 0.8);
+                this.size = random(0.5, 2.5);
+                this.alpha = random(0.1, 0.8);
+                this.blinkSpeed = random(0.005, 0.03);
+            }
+            update() {
+                this.alpha += this.blinkSpeed;
+                if (this.alpha > 1 || this.alpha < 0.1) this.blinkSpeed *= -1;
+            }
+            draw() {
+                ctx.fillStyle = `rgba(255, 255, 255, ${this.alpha})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        class Firefly {
+            constructor() {
+                this.x = random(0, width);
+                this.y = random(height/2, height);
+                this.size = random(1, 3);
+                this.speedX = random(-0.5, 0.5);
+                this.speedY = random(-0.5, -1.5);
+                this.alpha = 0;
+                this.cycle = random(0, Math.PI * 2);
+            }
+            update() {
+                this.x += this.speedX + Math.sin(this.cycle) * 0.5;
+                this.y += this.speedY;
+                this.cycle += 0.05;
+                this.alpha = (Math.sin(this.cycle) + 1) / 2 * 0.8; // Pulse effect
+
+                if(this.y < 0) {
+                    this.y = height + 10;
+                    this.x = random(0, width);
+                }
+            }
+            draw() {
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = "gold";
+                ctx.fillStyle = `rgba(255, 215, 0, ${this.alpha})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+        }
+
+        class CursorParticle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = random(1, 3);
+                this.speedX = random(-1, 1);
+                this.speedY = random(-1, 1);
+                this.life = 1;
+                this.decay = random(0.02, 0.05);
+                this.color = `hsl(${random(0, 360)}, 100%, 70%)`;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.life -= this.decay;
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = this.life;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        class ShootingStar {
+            constructor() {
+                this.reset();
+            }
+            reset() {
+                this.x = random(0, width);
+                this.y = random(0, height / 2);
+                this.len = random(80, 150);
+                this.speed = random(10, 20);
+                this.size = random(1, 3);
+                this.waitTime = random(50, 300);
+                this.active = false;
+            }
+            update() {
+                if (this.waitTime > 0) {
+                    this.waitTime--;
+                    return;
+                }
+                this.active = true;
+                this.x -= this.speed;
+                this.y += this.speed * 0.5;
+                if (this.x < -this.len || this.y > height) {
+                    this.active = false;
+                    this.reset();
+                }
+            }
+            draw() {
+                if (!this.active) return;
+                // Safety check: ensure coordinates are valid numbers
+                if (!isFinite(this.x) || !isFinite(this.y) || !isFinite(this.len)) return;
+
+                let grad = ctx.createLinearGradient(this.x, this.y, this.x + this.len, this.y - (this.len*0.5));
+                grad.addColorStop(0, "rgba(255,255,255,1)");
+                grad.addColorStop(1, "rgba(255,255,255,0)");
+                ctx.strokeStyle = grad;
+                ctx.lineCap = "round";
+                ctx.lineWidth = this.size;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                ctx.lineTo(this.x + this.len, this.y - (this.len * 0.5));
+                ctx.stroke();
+            }
+        }
+
+        class Heart {
+            constructor(x, y, isClickEffect = false) {
+                this.x = x || random(0, width);
+                this.y = y || height + 10;
+                this.size = isClickEffect ? random(10, 20) : random(5, 10);
+                this.speedY = isClickEffect ? random(-3, -7) : random(-1, -3);
+                this.speedX = random(-2, 2);
+                this.alpha = 1;
+                this.decay = isClickEffect ? random(0.01, 0.03) : random(0.002, 0.005);
+                this.rotation = random(0, 360);
+                const colors = ["255, 105, 180", "255, 0, 100", "220, 100, 255", "255, 50, 50"];
+                this.color = colors[Math.floor(random(0, colors.length))];
+            }
+            update() {
+                this.y += this.speedY;
+                this.x += this.speedX;
+                this.alpha -= this.decay;
+                this.rotation += 0.1;
+            }
+            draw() {
+                if (this.alpha <= 0) return;
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation);
+                ctx.fillStyle = `rgba(${this.color}, ${this.alpha})`;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = `rgba(${this.color}, 0.5)`;
+                
+                ctx.beginPath();
+                const s = this.size;
+                ctx.moveTo(0, 0);
+                ctx.bezierCurveTo(-s/2, -s/2, -s, s/3, 0, s);
+                ctx.bezierCurveTo(s, s/3, s/2, -s/2, 0, 0);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        class FloatingText {
+            constructor(x, y, text) {
+                this.x = x;
+                this.y = y;
+                this.text = text;
+                this.alpha = 1;
+                this.velocity = 1.5;
+                this.size = 20;
+                this.hue = 0;
+            }
+            update() {
+                this.y -= this.velocity;
+                this.alpha -= 0.01;
+                this.size += 0.2;
+                this.hue += 5;
+            }
+            draw() {
+                ctx.save();
+                ctx.font = `bold ${this.size}px Arial`;
+                ctx.fillStyle = `hsla(${300 + Math.sin(this.hue)*30}, 100%, 80%, ${this.alpha})`;
+                ctx.textAlign = "center";
+                ctx.shadowColor = "rgba(255, 255, 255, 0.8)";
+                ctx.shadowBlur = 15;
+                ctx.fillText(this.text, this.x, this.y);
+                ctx.restore();
+            }
+        }
+
+        class Stem {
+            constructor(x, y, targetHeight, delay, colorType) {
+                this.x = x;
+                this.y = y;
+                this.targetHeight = targetHeight;
+                this.currentHeight = 0;
+                this.width = random(2, 5);
+                this.delay = delay;
+                this.bloomed = false;
+                this.flowerScale = 0;
+                this.curve = random(-25, 25);
+                this.colorType = colorType; 
+                this.swaySpeed = random(0.001, 0.003);
+                this.swayOffset = random(0, 100);
+                
+                this.leafs = [];
+                const leafCount = Math.floor(targetHeight / 60);
+                for(let i=0; i<leafCount; i++) {
+                    this.leafs.push({
+                        y: random(50, targetHeight - 50),
+                        dir: random(0, 1) > 0.5 ? 1 : -1,
+                        size: random(8, 15),
+                        grown: false
+                    });
+                }
+            }
+            update() {
+                if (this.delay > 0) {
+                    this.delay--;
+                    return;
+                }
+
+                if (this.currentHeight < this.targetHeight) {
+                    this.currentHeight += 1.5 * CONFIG.speed;
+                } else {
+                    this.bloomed = true;
+                }
+
+                if (this.bloomed && this.flowerScale < 1) {
+                    this.flowerScale += 0.015 * CONFIG.speed;
+                }
+            }
+            draw() {
+                if (this.delay > 0) return;
+
+                // Swaying logic
+                const sway = Math.sin(Date.now() * this.swaySpeed + this.swayOffset) * 10;
+
+                // Stem
+                ctx.strokeStyle = `rgb(34, 139, 34)`;
+                ctx.lineWidth = this.width;
+                ctx.lineCap = "round";
+                
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y);
+                const controlX = this.x + this.curve + sway/2;
+                const endX = this.x + this.curve / 2 + sway;
+                const endY = this.y - this.currentHeight;
+                
+                ctx.quadraticCurveTo(controlX, this.y - this.currentHeight / 2, endX, endY);
+                ctx.stroke();
+
+                // Leaves
+                this.leafs.forEach(leaf => {
+                    if (this.currentHeight > leaf.y) {
+                         const ratio = leaf.y / this.targetHeight;
+                         const leafX = this.x + (this.curve/2 * ratio) + (sway * ratio); 
+                         const leafY = this.y - leaf.y;
+                         
+                         ctx.fillStyle = "rgb(40, 160, 40)";
+                         ctx.beginPath();
+                         ctx.ellipse(
+                             leafX + (leaf.dir * leaf.size), 
+                             leafY, 
+                             leaf.size, 
+                             leaf.size/2, 
+                             leaf.dir === 1 ? -0.5 + (sway*0.01) : 0.5 + (sway*0.01), 
+                             0, Math.PI * 2
+                        );
+                         ctx.fill();
+                    }
+                });
+
+                // Flower
+                if (this.bloomed || this.flowerScale > 0) {
+                    // Pulse breathing
+                    const pulse = 1 + Math.sin(Date.now() * 0.003) * 0.05;
+                    this.drawFlower(endX, endY, this.flowerScale * pulse);
+                }
+            }
+
+            drawFlower(x, y, scale) {
+                ctx.save();
+                ctx.translate(x, y);
+                ctx.scale(scale, scale);
+                
+                let primaryColor, secondaryColor;
+                if (this.colorType === 'pink') {
+                    primaryColor = "255, 20, 147"; // Deep Pink
+                    secondaryColor = "255, 182, 193"; 
+                } else if (this.colorType === 'purple') {
+                    primaryColor = "148, 0, 211"; // Violet
+                    secondaryColor = "216, 191, 216";
+                } else {
+                    primaryColor = "30, 144, 255"; // Dodger Blue
+                    secondaryColor = "135, 206, 250"; 
+                }
+
+                ctx.shadowBlur = 30;
+                ctx.shadowColor = `rgba(${primaryColor}, 0.8)`;
+
+                const petalCount = 7;
+                const angleStep = (Math.PI * 2) / petalCount;
+
+                for (let i = 0; i < petalCount; i++) {
+                    ctx.save();
+                    ctx.rotate(i * angleStep + Math.sin(Date.now() * 0.001) * 0.1);
+                    
+                    let grad = ctx.createRadialGradient(0, 0, 0, 0, -20, 40);
+                    grad.addColorStop(0, `rgba(${primaryColor}, 0.95)`);
+                    grad.addColorStop(1, `rgba(${secondaryColor}, 0.3)`);
+                    
+                    ctx.fillStyle = grad;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    ctx.bezierCurveTo(-15, -30, -10, -50, 0, -60);
+                    ctx.bezierCurveTo(10, -50, 15, -30, 0, 0);
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                ctx.fillStyle = `rgb(255, 255, 150)`;
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.arc(0, 0, 6, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.restore();
+                
+                if (Math.random() < 0.005 && scale > 0.8) {
+                    hearts.push(new Heart(x, y));
+                }
+            }
+        }
+
+        class Grass {
+            constructor() {
+                this.x = random(0, width);
+                this.height = random(30, 80);
+                this.swaySpeed = random(0.001, 0.003);
+                this.offset = random(0, 100);
+            }
+            draw() {
+                const sway = Math.sin(Date.now() * this.swaySpeed + this.offset) * 20;
+                ctx.strokeStyle = `rgb(10, ${80 + random(0, 40)}, 10)`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(this.x, height);
+                ctx.quadraticCurveTo(
+                    this.x + sway, height - this.height / 2, 
+                    this.x + sway * 0.5, height - this.height
+                );
+                ctx.stroke();
+            }
+        }
+
+        // --- Typing ---
+        function typeWriter(text, i, fnCallback) {
+            if (i < (text.length)) {
+                if (text.substring(i, i+1) === '\n') {
+                    messageEl.innerHTML += '<br>';
+                } else {
+                    messageEl.innerHTML = text.substring(0, i+1) + '<span class="cursor" aria-hidden="true"></span>';
+                }
+                setTimeout(function() {
+                    typeWriter(text, i + 1, fnCallback)
+                }, 100);
+            } else if (typeof fnCallback == 'function') {
+                setTimeout(fnCallback, 700);
+            }
+        }
+
+        // --- Interaction Logic ---
+        function handleInteraction(x, y) {
+            const msgIndex = clickCount % CONFIG.touchMessages.length;
+            const text = CONFIG.touchMessages[msgIndex];
+            
+            floatingTexts.push(new FloatingText(x, y, text));
+            
+            // Explosion
+            for(let i=0; i<20; i++) {
+                hearts.push(new Heart(x, y, true));
+                cursorParticles.push(new CursorParticle(x, y));
+            }
+            
+            clickCount++;
+        }
+
+        function handleMove(x, y) {
+            if (Math.random() > 0.5) {
+                cursorParticles.push(new CursorParticle(x, y));
+            }
+        }
+
+        window.addEventListener('click', (e) => handleInteraction(e.clientX, e.clientY));
+        window.addEventListener('mousemove', (e) => handleMove(e.clientX, e.clientY));
+        
+        window.addEventListener('touchstart', (e) => {
+             e.preventDefault(); 
+             for (let i = 0; i < e.touches.length; i++) {
+                handleInteraction(e.touches[i].clientX, e.touches[i].clientY);
+             }
+        }, { passive: false });
+        
+        window.addEventListener('touchmove', (e) => {
+             for (let i = 0; i < e.touches.length; i++) {
+                handleMove(e.touches[i].clientX, e.touches[i].clientY);
+             }
+        }, { passive: false });
+
+        // --- Main ---
+
+        function drawMoon() {
+            const moonX = width - 100;
+            const moonY = 100;
+            const moonSize = 60;
+
+            // Glow
+            ctx.shadowBlur = 80;
+            ctx.shadowColor = "rgba(255, 255, 200, 0.5)";
+            
+            ctx.fillStyle = "rgba(255, 255, 230, 0.9)";
+            ctx.beginPath();
+            ctx.arc(moonX, moonY, moonSize, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Craters (optional detail)
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = "rgba(230, 230, 210, 0.5)";
+            ctx.beginPath();
+            ctx.arc(moonX - 20, moonY + 10, 10, 0, Math.PI * 2);
+            ctx.arc(moonX + 15, moonY - 15, 8, 0, Math.PI * 2);
+            ctx.arc(moonX + 10, moonY + 25, 5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawSky() {
+            // Dynamic aurora effect
+            skyShift += 0.05;
+            const hue = 240 + Math.sin(skyShift * 0.01) * 20; // Shift between deep blues/purples
+            
+            let grad = ctx.createLinearGradient(0, 0, 0, height);
+            grad.addColorStop(0, `hsla(${hue}, 60%, 5%, 1)`); // Top
+            grad.addColorStop(1, `hsla(${hue - 20}, 60%, 15%, 1)`); // Bottom
+            
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        function initScene() {
+            particles = [];
+            stars = [];
+            stems = [];
+            grass = [];
+            hearts = [];
+            floatingTexts = [];
+            shootingStars = [];
+            fireflies = [];
+            cursorParticles = [];
+
+            // Background Stars
+            for(let i=0; i<150; i++) stars.push(new Star());
+            
+            // Fireflies
+            for(let i=0; i<30; i++) fireflies.push(new Firefly());
+            
+            // Shooting Stars
+            for(let i=0; i<3; i++) shootingStars.push(new ShootingStar());
+
+            // Grass
+            for(let i=0; i<width/3; i++) grass.push(new Grass());
+
+            // Flowers
+            const centerX = width / 2;
+            const flowerCount = 15;
+            for(let i=0; i<flowerCount; i++) {
+                const xOffset = (Math.random() - 0.5) * (Math.min(width, 800)); 
+                const heightVar = random(height * 0.4, height * 0.8);
+                const colors = ['pink', 'blue', 'purple'];
+                const color = colors[Math.floor(random(0, colors.length))];
+                stems.push(new Stem(centerX + xOffset, height, heightVar, i * 60, color));
+            }
+        }
+
+        function animate() {
+            drawSky();
+            drawMoon();
+
+            stars.forEach(s => { s.update(); s.draw(); });
+            shootingStars.forEach(s => { s.update(); s.draw(); });
+            fireflies.forEach(f => { f.update(); f.draw(); });
+
+            stems.forEach(s => { s.update(); s.draw(); });
+            grass.forEach(g => g.draw());
+            
+            for (let i = hearts.length - 1; i >= 0; i--) {
+                hearts[i].update();
+                hearts[i].draw();
+                if (hearts[i].alpha <= 0) hearts.splice(i, 1);
+            }
+
+            for (let i = cursorParticles.length - 1; i >= 0; i--) {
+                cursorParticles[i].update();
+                cursorParticles[i].draw();
+                if (cursorParticles[i].life <= 0) cursorParticles.splice(i, 1);
+            }
+
+            for (let i = floatingTexts.length - 1; i >= 0; i--) {
+                floatingTexts[i].update();
+                floatingTexts[i].draw();
+                if (floatingTexts[i].alpha <= 0) floatingTexts.splice(i, 1);
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // Start
+        // initScene(); // Removed to ensure width/height are set first
+        resize();       // Calls initScene() internally
+        animate();
+
+        setTimeout(() => {
+            typeWriter(CONFIG.message, 0, function() {
+                const cursor = document.querySelector('.cursor');
+                if(cursor) cursor.style.display = 'none';
+            });
+        }, 1000);
+
+    </script>
+</body>
+</html>
